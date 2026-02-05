@@ -39,11 +39,54 @@ export interface RecordEventRequest {
 export interface LiveScore {
   match_id: string
   team_a: string
+  team_a_code: string
   team_b: string
+  team_b_code: string
+  tournament: string
   status: string
-  score: string
+  score: Record<string, any>
   score_detail: Record<string, any>
-  is_game_over: boolean
+  is_live: boolean
+}
+
+
+export interface CricketState {
+  sport_type: 'CRICKET'
+  team_a_id: string
+  team_b_id: string
+  batting_team_id: string
+  innings: number
+  team_a_runs: number
+  team_a_wickets: number
+  team_a_overs: number
+  team_b_runs: number
+  team_b_wickets: number
+  team_b_overs: number
+  current_over: number
+  current_ball: number
+  balls_in_over: number
+  total_overs: number
+  max_wickets: number
+  is_live: boolean
+  is_over: boolean
+  target?: number
+  result?: string
+}
+
+
+export interface WSMessage {
+  type: 'SCORE_UPDATE' | 'MATCH_STARTED' | 'MATCH_ENDED' | 'ERROR' | 'INITIAL_STATE'
+  match_id: string
+  payload: any
+  timestamp: number
+}
+
+
+export const getWebSocketUrl = (matchId: string) => {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  
+  const host = window.location.host
+  return `${protocol}//${host}/ws/matches/${matchId}`
 }
 
 export const matchesApi = {

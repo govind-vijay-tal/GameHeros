@@ -2,10 +2,12 @@ package services
 
 import (
 	"database/sql"
+	"log"
 
 	"gameheros/internal/models"
 	"gameheros/internal/repo"
 	"gameheros/internal/rules"
+	"gameheros/internal/scoring"
 
 	"github.com/google/uuid"
 )
@@ -132,4 +134,147 @@ func (s *MatchService) GetEvents(id string) ([]models.MatchEvent, error) {
 
 func (s *MatchService) GetLiveScore(id string) (*models.MatchResponse, error) {
 	return s.GetByID(id)
+}
+
+func (s *MatchService) StartMatch(id string) (*models.MatchResponse, scoring.MatchState, error) {
+	matchID, err := rules.ValidateUUID(id, "match")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	match, sportType, err := s.matchRepo.GetMatchWithTournament(matchID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil, rules.ErrMatchNotFound
+		}
+		return nil, nil, err
+	}
+
+	if match.Status == "LIVE" {
+		return nil, nil, rules.ErrMatchAlreadyLive
+	}
+
+	if match.Status == "COMPLETED" {
+		return nil, nil, rules.ErrMatchAlreadyCompleted
+	}
+
+	if err := s.matchRepo.UpdateStatus(matchID, "LIVE"); err != nil {
+		return nil, nil, err
+	}
+
+	manager := scoring.GetMatchManager()
+	state, err := manager.StartMatch(matchID, sportType, match.TeamAID, match.TeamBID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	stateJSONB, err := scoring.StateToJSONB(state)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := s.matchRepo.UpdateScoreSummary(matchID, stateJSONB, 1); err != nil {
+		log.Printf("[MatchService] Error persisting initial state: %v", err)
+	}
+
+	match.Status = "LIVE"
+	match.ScoreSummary = stateJSONB
+
+	return match, state, nil
+}
+
+func (s *MatchService) RecordEvent(id string, eventType string, eventData map[string]interface{}) (*models.MatchResponse, scoring.MatchState, error) {
+	matchID, err := rules.ValidateUUID(id, "match")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	manager := scoring.GetMatchManager()
+	if !manager.IsMatchLive(matchID) {
+
+		match, err := s.matchRepo.GetByIDSimple(matchID)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return nil, nil, rules.ErrMatchNotFound
+			}
+			return nil, nil, err
+		}
+		if match.Status != "LIVE" {
+			return nil, nil, rules.ErrMatchNotLive
+		}
+		return nil, nil, rules.ErrMatchNotLive
+	}
+
+	event := scoring.Event{
+		Type:    eventType,
+		Payload: eventData,
+	}
+
+	state, err := manager.RecordEvent(matchID, event)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	matchEvent := &models.MatchEvent{
+		MatchID:   matchID,
+		EventType: eventType,
+		EventData: eventData,
+	}
+	if err := s.matchRepo.SaveEvent(matchEvent); err != nil {
+		log.Printf("[MatchService] Error persisting event: %v", err)
+	}
+
+	stateJSONB, err := scoring.StateToJSONB(state)
+	if err != nil {
+		log.Printf("[MatchService] Error converting state to JSONB: %v", err)
+	} else {
+		if err := s.matchRepo.UpdateScoreSummary(matchID, stateJSONB, 0); err != nil {
+			log.Printf("[MatchService] Error persisting score summary: %v", err)
+		}
+	}
+
+	match, err := s.matchRepo.GetByID(matchID)
+	if err != nil {
+		return nil, state, nil
+	}
+
+	return match, state, nil
+}
+
+func (s *MatchService) EndMatch(id string) (*models.MatchResponse, scoring.MatchState, error) {
+	matchID, err := rules.ValidateUUID(id, "match")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	manager := scoring.GetMatchManager()
+
+	state, err := manager.EndMatch(matchID)
+	if err != nil && err != scoring.ErrMatchNotFound {
+		return nil, nil, err
+	}
+
+	if err := s.matchRepo.UpdateStatus(matchID, "COMPLETED"); err != nil {
+		return nil, nil, err
+	}
+
+	if state != nil {
+		stateJSONB, err := scoring.StateToJSONB(state)
+		if err != nil {
+			log.Printf("[MatchService] Error converting final state to JSONB: %v", err)
+		} else {
+			if err := s.matchRepo.UpdateScoreSummary(matchID, stateJSONB, 0); err != nil {
+				log.Printf("[MatchService] Error persisting final score summary: %v", err)
+			}
+		}
+	}
+
+	match, err := s.matchRepo.GetByID(matchID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil, rules.ErrMatchNotFound
+		}
+		return nil, nil, err
+	}
+
+	return match, state, nil
 }

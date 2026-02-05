@@ -81,3 +81,56 @@ func (r *MatchRepo) GetEvents(matchID uuid.UUID) ([]models.MatchEvent, error) {
 	err := r.db.Select(&events, query, matchID)
 	return events, err
 }
+
+func (r *MatchRepo) UpdateStatus(matchID uuid.UUID, status string) error {
+	_, err := r.db.Exec(`UPDATE matches SET status = $1 WHERE id = $2`, status, matchID)
+	return err
+}
+
+func (r *MatchRepo) UpdateScoreSummary(matchID uuid.UUID, scoreSummary models.JSONB, version int) error {
+	_, err := r.db.Exec(
+		`UPDATE matches SET score_summary = $1, version = $2 WHERE id = $3`,
+		scoreSummary, version, matchID,
+	)
+	return err
+}
+
+func (r *MatchRepo) SaveEvent(event *models.MatchEvent) error {
+	query := `
+		INSERT INTO match_events (match_id, event_type, event_data)
+		VALUES ($1, $2, $3)
+		RETURNING id, created_at`
+	return r.db.QueryRow(query, event.MatchID, event.EventType, event.EventData).
+		Scan(&event.ID, &event.CreatedAt)
+}
+
+func (r *MatchRepo) GetByIDSimple(matchID uuid.UUID) (*models.Match, error) {
+	var match models.Match
+	query := `SELECT * FROM matches WHERE id = $1`
+	err := r.db.Get(&match, query, matchID)
+	return &match, err
+}
+
+func (r *MatchRepo) GetMatchWithTournament(matchID uuid.UUID) (*models.MatchResponse, string, error) {
+	type matchWithSport struct {
+		models.MatchResponse
+		SportType string `db:"sport_type"`
+	}
+	var result matchWithSport
+	query := `
+		SELECT 
+			m.*,
+			ta.name as team_a_name,
+			ta.short_code as team_a_short_code,
+			tb.name as team_b_name,
+			tb.short_code as team_b_short_code,
+			t.name as tournament_name,
+			t.sport_type as sport_type
+		FROM matches m
+		JOIN teams ta ON m.team_a_id = ta.id
+		JOIN teams tb ON m.team_b_id = tb.id
+		JOIN tournaments t ON m.tournament_id = t.id
+		WHERE m.id = $1`
+	err := r.db.Get(&result, query, matchID)
+	return &result.MatchResponse, result.SportType, err
+}

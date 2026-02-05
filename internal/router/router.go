@@ -69,5 +69,7 @@ func SetupRouter(db *sqlx.DB, cfg *config.Config) *gin.Engine {
 		api.GET("/players/:id/profile", h.GetPlayerProfile)
 	}
 
+	r.GET("/ws/matches/:id", h.HandleWebSocket)
+
 	return r
 }
