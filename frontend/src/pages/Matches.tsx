@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Calendar, Play } from 'lucide-react'
 import { matchesApi } from '../api/matches'
 const formatDateTime = (dateStr: string) => {
@@ -8,6 +8,7 @@ const formatDateTime = (dateStr: string) => {
 }
 
 export default function Matches() {
+  const navigate = useNavigate()
   const { data: matches, isLoading } = useQuery({
     queryKey: ['matches'],
     queryFn: () => matchesApi.getAll().then(res => res.data),
@@ -68,14 +69,16 @@ export default function Matches() {
                     {match.status}
                   </span>
                   {match.status === 'LIVE' && (
-                    <Link
-                      to={`/matches/${match.id}/scoring`}
-                      onClick={(e) => e.stopPropagation()}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        navigate(`/matches/${match.id}/scoring`)
+                      }}
                       className="btn btn-primary flex items-center"
                     >
                       <Play className="h-4 w-4 mr-2" />
                       Score
-                    </Link>
+                    </button>
                   )}
                 </div>
               </div>

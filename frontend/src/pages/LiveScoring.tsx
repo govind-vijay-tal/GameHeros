@@ -23,20 +23,22 @@ export default function LiveScoring() {
   })
 
   
-  const { data: events = [], refetch: refetchEvents } = useQuery({
+  const { data: eventsData, refetch: refetchEvents } = useQuery({
     queryKey: ['matchEvents', id],
     queryFn: () => matchesApi.getEvents(id!).then(res => res.data),
     enabled: !!id && match?.status !== 'SCHEDULED',
   })
+  
+  const events = eventsData || []
 
   
   const { isConnected, state: wsState, score: wsScore, error: wsError, reconnect } = useMatchWebSocket(id, {
-    onScoreUpdate: (state, score) => {
+    onScoreUpdate: (_state, score) => {
       console.log('Score updated:', score)
       queryClient.invalidateQueries({ queryKey: ['match', id] })
       refetchEvents()
     },
-    onMatchEnded: (state, result) => {
+    onMatchEnded: (_state, result) => {
       console.log('Match ended:', result)
       queryClient.invalidateQueries({ queryKey: ['match', id] })
       refetchEvents()
@@ -210,7 +212,7 @@ export default function LiveScoring() {
       )}
 
       {/* Recent Events - This Over */}
-      {(isLive || isCompleted) && events.length > 0 && (
+      {(isLive || isCompleted) && events && events.length > 0 && (
         <div className="card">
           <h3 className="text-lg font-bold text-gray-900 mb-3">Recent Balls</h3>
           <RecentBalls events={events} />

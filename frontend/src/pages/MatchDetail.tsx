@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Play, RefreshCw, Radio, Circle } from 'lucide-react'
+import { ArrowLeft, Play, RefreshCw, Radio } from 'lucide-react'
 import { matchesApi, CricketState, MatchEvent } from '../api/matches'
 import { format } from 'date-fns'
 import { useMatchWebSocket } from '../hooks/useMatchWebSocket'
@@ -20,12 +20,14 @@ export default function MatchDetail() {
   })
 
   
-  const { data: events = [], refetch: refetchEvents } = useQuery({
+  const { data: eventsData, refetch: refetchEvents } = useQuery({
     queryKey: ['matchEvents', id],
     queryFn: () => matchesApi.getEvents(id!).then(res => res.data),
     enabled: !!id && match?.status !== 'SCHEDULED',
     refetchInterval: match?.status === 'LIVE' ? 5000 : false,
   })
+  
+  const events = eventsData || []
 
   
   const { isConnected, state: wsState, score: wsScore } = useMatchWebSocket(
@@ -191,7 +193,7 @@ export default function MatchDetail() {
       </div>
 
       {/* Ball-by-Ball Events */}
-      {events.length > 0 && (
+      {events && events.length > 0 && (
         <div className="card">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Ball-by-Ball Commentary</h2>
           <BallByBallTimeline events={events} />
