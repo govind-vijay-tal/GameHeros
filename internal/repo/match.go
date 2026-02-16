@@ -1,6 +1,8 @@
 package repo
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"gameheros/internal/models"
@@ -19,7 +21,7 @@ func NewMatchRepo(db *sqlx.DB) *MatchRepo {
 
 func (r *MatchRepo) Create(m *models.Match) error {
 	_, err := r.db.Exec(`
-		INSERT INTO matches (id, tournament_id, team_a_id, team_b_id, start_time, status, score_summary, version) 
+		INSERT INTO matches (id, tournament_id, team_a_id, team_b_id, start_time, status, score_summary, version)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		m.ID, m.TournamentID, m.TeamAID, m.TeamBID, m.StartTime, m.Status, m.ScoreSummary, m.Version,
 	)
@@ -29,7 +31,7 @@ func (r *MatchRepo) Create(m *models.Match) error {
 func (r *MatchRepo) GetByID(id uuid.UUID) (*models.MatchResponse, error) {
 	var match models.MatchResponse
 	query := `
-		SELECT 
+		SELECT
 			m.*,
 			ta.name as team_a_name,
 			ta.short_code as team_a_short_code,
@@ -48,7 +50,7 @@ func (r *MatchRepo) GetByID(id uuid.UUID) (*models.MatchResponse, error) {
 func (r *MatchRepo) GetAll() ([]models.MatchResponse, error) {
 	var matches []models.MatchResponse
 	query := `
-		SELECT 
+		SELECT
 			m.*,
 			ta.name as team_a_name,
 			ta.short_code as team_a_short_code,
@@ -67,8 +69,8 @@ func (r *MatchRepo) GetAll() ([]models.MatchResponse, error) {
 func (r *MatchRepo) ExistsSameDay(tournamentID, teamAID, teamBID uuid.UUID, startTime time.Time) (bool, error) {
 	var count int
 	err := r.db.Get(&count, `
-		SELECT COUNT(*) FROM matches 
-		WHERE tournament_id = $1 
+		SELECT COUNT(*) FROM matches
+		WHERE tournament_id = $1
 		AND ((team_a_id = $2 AND team_b_id = $3) OR (team_a_id = $3 AND team_b_id = $2))
 		AND DATE(start_time) = DATE($4)`,
 		tournamentID, teamAID, teamBID, startTime)
@@ -111,26 +113,78 @@ func (r *MatchRepo) GetByIDSimple(matchID uuid.UUID) (*models.Match, error) {
 	return &match, err
 }
 
-func (r *MatchRepo) GetMatchWithTournament(matchID uuid.UUID) (*models.MatchResponse, string, error) {
+func (r *MatchRepo) GetMatchWithTournament(matchID uuid.UUID) (*models.MatchResponse, string, models.JSONB, error) {
 	type matchWithSport struct {
 		models.MatchResponse
-		SportType string `db:"sport_type"`
+		SportType string       `db:"sport_type"`
+		Config    models.JSONB `db:"config"`
 	}
 	var result matchWithSport
 	query := `
-		SELECT 
+		SELECT
 			m.*,
 			ta.name as team_a_name,
 			ta.short_code as team_a_short_code,
 			tb.name as team_b_name,
 			tb.short_code as team_b_short_code,
 			t.name as tournament_name,
-			t.sport_type as sport_type
+			t.sport_type as sport_type,
+			COALESCE(t.config, '{}'::jsonb) as config
 		FROM matches m
 		JOIN teams ta ON m.team_a_id = ta.id
 		JOIN teams tb ON m.team_b_id = tb.id
 		JOIN tournaments t ON m.tournament_id = t.id
 		WHERE m.id = $1`
 	err := r.db.Get(&result, query, matchID)
-	return &result.MatchResponse, result.SportType, err
+	return &result.MatchResponse, result.SportType, result.Config, err
+}
+
+func (r *MatchRepo) Update(matchID uuid.UUID, teamAID, teamBID *uuid.UUID, startTime *time.Time) error {
+	updates := []string{}
+	args := []interface{}{}
+	argIndex := 1
+
+	if teamAID != nil {
+		updates = append(updates, fmt.Sprintf("team_a_id = $%d", argIndex))
+		args = append(args, *teamAID)
+		argIndex++
+	}
+
+	if teamBID != nil {
+		updates = append(updates, fmt.Sprintf("team_b_id = $%d", argIndex))
+		args = append(args, *teamBID)
+		argIndex++
+	}
+
+	if startTime != nil {
+		updates = append(updates, fmt.Sprintf("start_time = $%d", argIndex))
+		args = append(args, *startTime)
+		argIndex++
+	}
+
+	if len(updates) == 0 {
+		return nil
+	}
+
+	args = append(args, matchID)
+	query := fmt.Sprintf("UPDATE matches SET %s WHERE id = $%d", strings.Join(updates, ", "), argIndex)
+	_, err := r.db.Exec(query, args...)
+	return err
+}
+
+func (r *MatchRepo) Delete(matchID uuid.UUID) error {
+	_, err := r.db.Exec("DELETE FROM matches WHERE id = $1", matchID)
+	return err
+}
+
+func (r *MatchRepo) ExistsSameDayExcluding(tournamentID, teamAID, teamBID uuid.UUID, startTime time.Time, excludeMatchID uuid.UUID) (bool, error) {
+	var count int
+	err := r.db.Get(&count, `
+		SELECT COUNT(*) FROM matches
+		WHERE tournament_id = $1
+		AND ((team_a_id = $2 AND team_b_id = $3) OR (team_a_id = $3 AND team_b_id = $2))
+		AND DATE(start_time) = DATE($4)
+		AND id != $5`,
+		tournamentID, teamAID, teamBID, startTime, excludeMatchID)
+	return count > 0, err
 }

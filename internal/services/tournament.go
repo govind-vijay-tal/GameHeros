@@ -42,12 +42,18 @@ func (s *TournamentService) Create(req models.CreateTournamentRequest) (*models.
 		return nil, rules.ErrDuplicateTournament
 	}
 
+	config := req.Config
+	if config == nil {
+		config = models.JSONB{}
+	}
+
 	tournament := &models.Tournament{
 		ID:        uuid.New(),
 		Name:      name,
 		SportType: sportType,
 		StartDate: time.Now(),
 		Status:    "UPCOMING",
+		Config:    config,
 	}
 
 	if err := s.tournamentRepo.Create(tournament); err != nil {
@@ -140,4 +146,21 @@ func (s *TournamentService) GetTeams(id string) ([]models.Team, error) {
 	}
 
 	return s.tournamentRepo.GetTeams(tournamentID)
+}
+
+func (s *TournamentService) RecalculateLeaderboard(id string) error {
+	tournamentID, err := rules.ValidateUUID(id, "tournament")
+	if err != nil {
+		return err
+	}
+
+	_, err = s.tournamentRepo.GetByID(tournamentID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return rules.ErrTournamentNotFound
+		}
+		return err
+	}
+
+	return s.tournamentRepo.CalculateLeaderboard(tournamentID)
 }

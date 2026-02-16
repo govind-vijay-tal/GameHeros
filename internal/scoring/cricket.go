@@ -23,6 +23,9 @@ type CricketState struct {
 	TeamBID       uuid.UUID `json:"team_b_id"`
 	BattingTeamID uuid.UUID `json:"batting_team_id"`
 
+	TeamAShortCode string `json:"team_a_short_code,omitempty"`
+	TeamBShortCode string `json:"team_b_short_code,omitempty"`
+
 	Innings int `json:"innings"`
 
 	TeamARuns    int     `json:"team_a_runs"`
@@ -75,16 +78,38 @@ func (r *CricketRules) GetSupportedEvents() []string {
 	return []string{EventBallBowled, EventWicket, EventWide, EventNoBall, EventInningsEnd}
 }
 
-func (r *CricketRules) InitState(teamAID, teamBID uuid.UUID) MatchState {
+func (r *CricketRules) InitState(teamAID, teamBID uuid.UUID, config map[string]interface{}) MatchState {
+	totalOvers := 20
+	maxWickets := 10
+	teamAShortCode := "Team A"
+	teamBShortCode := "Team B"
+
+	if config != nil && len(config) > 0 {
+		if oversPerMatch, ok := config["overs_per_match"].(float64); ok {
+			totalOvers = int(oversPerMatch)
+		}
+		if playersPerTeam, ok := config["players_per_team"].(float64); ok {
+			maxWickets = int(playersPerTeam)
+		}
+		if code, ok := config["team_a_short_code"].(string); ok && code != "" {
+			teamAShortCode = code
+		}
+		if code, ok := config["team_b_short_code"].(string); ok && code != "" {
+			teamBShortCode = code
+		}
+	}
+
 	return &CricketState{
-		SportType:     "CRICKET",
-		TeamAID:       teamAID,
-		TeamBID:       teamBID,
-		BattingTeamID: teamAID,
-		Innings:       1,
-		TotalOvers:    20,
-		MaxWickets:    10,
-		IsLive:        true,
+		SportType:      "CRICKET",
+		TeamAID:        teamAID,
+		TeamBID:        teamBID,
+		BattingTeamID:  teamAID,
+		TeamAShortCode: teamAShortCode,
+		TeamBShortCode: teamBShortCode,
+		Innings:        1,
+		TotalOvers:     totalOvers,
+		MaxWickets:     maxWickets,
+		IsLive:         true,
 	}
 }
 
@@ -240,20 +265,24 @@ func (r *CricketRules) checkMatchConditions(state *CricketState) {
 		r.endInnings(state)
 	} else if state.Innings == 2 {
 
-		if state.TeamBRuns > state.Target-1 {
+		if state.TeamBRuns >= state.Target {
 			state.IsOver = true
 			state.IsLive = false
 			wicketsRemaining := state.MaxWickets - state.TeamBWickets
-			state.Result = fmt.Sprintf("Team B won by %d wickets", wicketsRemaining)
+			state.Result = fmt.Sprintf("%s won by %d wickets", state.TeamBShortCode, wicketsRemaining)
 		} else if oversComplete || allOut {
 
 			state.IsOver = true
 			state.IsLive = false
 			if state.TeamARuns > state.TeamBRuns {
 				runsDiff := state.TeamARuns - state.TeamBRuns
-				state.Result = fmt.Sprintf("Team A won by %d runs", runsDiff)
+				state.Result = fmt.Sprintf("%s won by %d runs", state.TeamAShortCode, runsDiff)
 			} else if state.TeamARuns == state.TeamBRuns {
 				state.Result = "Match tied"
+			} else {
+
+				runsDiff := state.TeamBRuns - state.TeamARuns
+				state.Result = fmt.Sprintf("%s won by %d runs", state.TeamBShortCode, runsDiff)
 			}
 		}
 	}
@@ -274,10 +303,10 @@ func (r *CricketRules) endInnings(state *CricketState) {
 		state.IsLive = false
 		if state.TeamARuns > state.TeamBRuns {
 			runsDiff := state.TeamARuns - state.TeamBRuns
-			state.Result = fmt.Sprintf("Team A won by %d runs", runsDiff)
+			state.Result = fmt.Sprintf("%s won by %d runs", state.TeamAShortCode, runsDiff)
 		} else if state.TeamBRuns > state.TeamARuns {
 			wicketsRemaining := state.MaxWickets - state.TeamBWickets
-			state.Result = fmt.Sprintf("Team B won by %d wickets", wicketsRemaining)
+			state.Result = fmt.Sprintf("%s won by %d wickets", state.TeamBShortCode, wicketsRemaining)
 		} else {
 			state.Result = "Match tied"
 		}

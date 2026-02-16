@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Users, ChevronRight } from 'lucide-react'
+import { Plus, Users } from 'lucide-react'
 import { teamsApi, CreateTeamRequest } from '../api/teams'
 
 export default function Teams() {
@@ -61,40 +60,51 @@ export default function Teams() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {teams?.map(team => (
-            <Link
-              key={team.id}
-              to={`/teams/${team.id}`}
-              className="card hover:shadow-lg transition-shadow group"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  {team.logo_url ? (
-                    <img 
-                      src={team.logo_url} 
-                      alt={team.name} 
-                      className="h-16 w-16 object-contain mr-4"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                        (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                      }}
-                    />
-                  ) : null}
-                  <div className={`h-16 w-16 rounded-full bg-primary-100 flex items-center justify-center mr-4 ${team.logo_url ? 'hidden' : ''}`}>
-                    <span className="text-primary-600 font-bold text-lg">{team.short_code}</span>
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-900 group-hover:text-primary-600 transition-colors">
-                      {team.name}
-                    </h3>
-                    <p className="text-sm text-gray-500">{team.short_code}</p>
-                  </div>
-                </div>
-                <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-primary-600 transition-colors" />
-              </div>
-            </Link>
-          ))}
+        <div className="card">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Logo</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Team</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Short Code</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teams?.map(team => (
+                  <tr key={team.id} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-3 px-4">
+                      <div className="relative h-10 w-10">
+                        {team.logo_url ? (
+                          <img
+                            src={team.logo_url}
+                            alt={team.name}
+                            className="h-10 w-10 object-contain"
+                            onError={(e) => {
+
+                              const img = e.target as HTMLImageElement
+                              img.style.display = 'none'
+                              const fallback = img.parentElement?.querySelector('.logo-fallback') as HTMLElement
+                              if (fallback) fallback.style.display = 'flex'
+                            }}
+                          />
+                        ) : null}
+                        <div
+                          className={`logo-fallback h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center ${team.logo_url ? 'hidden' : 'flex'}`}
+                        >
+                          <span className="text-primary-600 font-bold text-sm">{team.short_code}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="font-medium text-gray-900">{team.name}</span>
+                    </td>
+                    <td className="py-3 px-4 text-gray-600">{team.short_code}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

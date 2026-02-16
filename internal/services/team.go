@@ -57,28 +57,6 @@ func (s *TeamService) Create(req models.CreateTeamRequest) (*models.Team, error)
 	return team, nil
 }
 
-func (s *TeamService) GetByID(id string) (*models.TeamWithPlayers, error) {
-	teamID, err := rules.ValidateUUID(id, "team")
-	if err != nil {
-		return nil, err
-	}
-
-	teamResp, err := s.teamRepo.GetByIDWithCount(teamID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, rules.ErrTeamNotFound
-		}
-		return nil, err
-	}
-
-	players, _ := s.teamRepo.GetPlayers(teamID)
-
-	return &models.TeamWithPlayers{
-		Team:    teamResp.Team,
-		Players: players,
-	}, nil
-}
-
-func (s *TeamService) GetAll() ([]models.TeamResponse, error) {
+func (s *TeamService) GetAll() ([]models.Team, error) {
 	return s.teamRepo.GetAll()
 }

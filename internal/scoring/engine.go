@@ -29,7 +29,7 @@ type RuleEngine interface {
 
 	Apply(currentState MatchState, event Event) (MatchState, error)
 
-	InitState(teamAID, teamBID uuid.UUID) MatchState
+	InitState(teamAID, teamBID uuid.UUID, config map[string]interface{}) MatchState
 
 	LoadState(data []byte) (MatchState, error)
 

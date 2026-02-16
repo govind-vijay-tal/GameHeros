@@ -61,6 +61,7 @@ type Tournament struct {
 	SportType string    `json:"sport_type" db:"sport_type"`
 	StartDate time.Time `json:"start_date" db:"start_date"`
 	Status    string    `json:"status" db:"status"`
+	Config    JSONB     `json:"config,omitempty" db:"config"`
 }
 
 type Team struct {
@@ -71,10 +72,25 @@ type Team struct {
 }
 
 type Player struct {
-	ID     uuid.UUID  `json:"id" db:"id"`
-	TeamID uuid.UUID  `json:"team_id" db:"team_id"`
-	Name   string     `json:"name" db:"name"`
-	Role   NullString `json:"role,omitempty" db:"role"`
+	ID        uuid.UUID  `json:"id" db:"id"`
+	Name      string     `json:"name" db:"name"`
+	SportType string     `json:"sport_type" db:"sport_type"`
+	Role      NullString `json:"role,omitempty" db:"role"`
+}
+
+type CreatePlayerRequest struct {
+	Name      string `json:"name" binding:"required,min=2,max=255"`
+	SportType string `json:"sport_type" binding:"required,oneof=CRICKET FOOTBALL BADMINTON"`
+	Role      string `json:"role,omitempty"`
+}
+
+type UpdatePlayerRequest struct {
+	Name string `json:"name,omitempty" binding:"omitempty,min=2,max=255"`
+	Role string `json:"role,omitempty"`
+}
+
+type AddPlayerToTeamRequest struct {
+	PlayerID string `json:"player_id" binding:"required,uuid"`
 }
 
 type Match struct {
@@ -99,6 +115,11 @@ type MatchEvent struct {
 type CreateTournamentRequest struct {
 	Name      string `json:"name" binding:"required,min=3,max=255"`
 	SportType string `json:"sport_type" binding:"required,oneof=CRICKET FOOTBALL BADMINTON"`
+	Config    JSONB  `json:"config,omitempty"`
+}
+
+type UpdateTournamentConfigRequest struct {
+	Config JSONB `json:"config" binding:"required"`
 }
 
 type CreateTeamRequest struct {
@@ -111,6 +132,12 @@ type CreateMatchRequest struct {
 	TeamAID   string `json:"team_a_id" binding:"required,uuid"`
 	TeamBID   string `json:"team_b_id" binding:"required,uuid"`
 	StartTime string `json:"start_time" binding:"required"`
+}
+
+type UpdateMatchRequest struct {
+	TeamAID   string `json:"team_a_id,omitempty" binding:"omitempty,uuid"`
+	TeamBID   string `json:"team_b_id,omitempty" binding:"omitempty,uuid"`
+	StartTime string `json:"start_time,omitempty"`
 }
 
 type AddPlayerRequest struct {
@@ -134,16 +161,6 @@ type ErrorResponse struct {
 type TournamentResponse struct {
 	Tournament
 	TeamCount int `json:"team_count" db:"team_count"`
-}
-
-type TeamResponse struct {
-	Team
-	PlayerCount int `json:"player_count" db:"player_count"`
-}
-
-type TeamWithPlayers struct {
-	Team
-	Players []Player `json:"players"`
 }
 
 type MatchResponse struct {
@@ -170,4 +187,12 @@ type PlayerProfile struct {
 	TeamName string `json:"team_name" db:"team_name"`
 	TeamCode string `json:"team_code" db:"team_code"`
 	Stats    JSONB  `json:"stats,omitempty"`
+}
+
+type MatchStats struct {
+	ID        uuid.UUID `json:"id" db:"id"`
+	MatchID   uuid.UUID `json:"match_id" db:"match_id"`
+	Stats     JSONB     `json:"stats" db:"stats"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }

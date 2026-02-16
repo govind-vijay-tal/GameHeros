@@ -41,13 +41,13 @@ func GetMatchManager() *MatchManager {
 	return manager
 }
 
-func (m *MatchManager) StartMatch(matchID uuid.UUID, sportType string, teamAID, teamBID uuid.UUID) (MatchState, error) {
+func (m *MatchManager) StartMatch(matchID uuid.UUID, sportType string, teamAID, teamBID uuid.UUID, config map[string]interface{}) (MatchState, error) {
 	engine, err := GetEngine(sportType)
 	if err != nil {
 		return nil, err
 	}
 
-	state := engine.InitState(teamAID, teamBID)
+	state := engine.InitState(teamAID, teamBID, config)
 
 	liveMatch := &LiveMatch{
 		MatchID:   matchID,
@@ -89,14 +89,6 @@ func (m *MatchManager) RecordEvent(matchID uuid.UUID, event Event) (MatchState, 
 
 	liveMatch.State = newState
 	liveMatch.LastSeqID++
-
-	m.hub.BroadcastToMatch(matchID, MsgTypeScoreUpdate, map[string]interface{}{
-		"state":       newState,
-		"event":       event,
-		"score":       newState.GetScore(),
-		"is_over":     newState.IsGameOver(),
-		"sequence_id": liveMatch.LastSeqID,
-	})
 
 	return newState, nil
 }

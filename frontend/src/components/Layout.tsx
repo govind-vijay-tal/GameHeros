@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Trophy, Users, Calendar, Home } from 'lucide-react'
+import { Trophy, Users, Calendar, Home, User } from 'lucide-react'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -53,6 +53,17 @@ export default function Layout({ children }: LayoutProps) {
                 >
                   <Users className="h-4 w-4 mr-1" />
                   Teams
+                </Link>
+                <Link
+                  to="/players"
+                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                    isActive('/players')
+                      ? 'border-primary-500 text-gray-900'
+                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  }`}
+                >
+                  <User className="h-4 w-4 mr-1" />
+                  Players
                 </Link>
                 <Link
                   to="/matches"

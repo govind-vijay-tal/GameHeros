@@ -13,11 +13,41 @@ var validSports = map[string]bool{
 	"BADMINTON": true,
 }
 
-var validRoles = map[string]bool{
+var cricketRoles = map[string]bool{
 	"BATTER":        true,
 	"BOWLER":        true,
 	"ALL_ROUNDER":   true,
 	"WICKET_KEEPER": true,
+}
+
+var footballRoles = map[string]bool{
+	"GOALKEEPER": true,
+	"DEFENDER":   true,
+	"MIDFIELDER": true,
+	"FORWARD":    true,
+}
+
+var badmintonRoles = map[string]bool{
+	"SINGLES":       true,
+	"DOUBLES":       true,
+	"MIXED_DOUBLES": true,
+}
+
+var validRoles = map[string]bool{
+
+	"BATTER":        true,
+	"BOWLER":        true,
+	"ALL_ROUNDER":   true,
+	"WICKET_KEEPER": true,
+
+	"GOALKEEPER": true,
+	"DEFENDER":   true,
+	"MIDFIELDER": true,
+	"FORWARD":    true,
+
+	"SINGLES":       true,
+	"DOUBLES":       true,
+	"MIXED_DOUBLES": true,
 }
 
 func ValidateSportType(sportType string) error {
@@ -34,6 +64,34 @@ func ValidateRole(role string) error {
 	if !validRoles[strings.ToUpper(role)] {
 		return ErrInvalidRole
 	}
+	return nil
+}
+
+func ValidateRoleForSport(role, sportType string) error {
+	if role == "" {
+		return nil
+	}
+
+	normalizedRole := strings.ToUpper(role)
+	normalizedSport := strings.ToUpper(sportType)
+
+	switch normalizedSport {
+	case "CRICKET":
+		if !cricketRoles[normalizedRole] {
+			return ErrInvalidRole
+		}
+	case "FOOTBALL":
+		if !footballRoles[normalizedRole] {
+			return ErrInvalidRole
+		}
+	case "BADMINTON":
+		if !badmintonRoles[normalizedRole] {
+			return ErrInvalidRole
+		}
+	default:
+		return ErrInvalidRole
+	}
+
 	return nil
 }
 

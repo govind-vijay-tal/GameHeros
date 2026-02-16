@@ -16,6 +16,9 @@ const (
 	MsgTypeMatchStarted  = "MATCH_STARTED"
 	MsgTypeMatchEnded    = "MATCH_ENDED"
 	MsgTypeError         = "ERROR"
+	MsgTypeEventsList    = "EVENTS_LIST"
+	MsgTypeEventRecord   = "RECORD_EVENT"
+	MsgTypeMatchUpdate   = "MATCH_UPDATE"
 )
 
 type WSMessage struct {
@@ -30,6 +33,7 @@ type Client struct {
 	conn    *websocket.Conn
 	Send    chan []byte
 	matchID uuid.UUID
+	handler func(*Client, []byte)
 }
 
 type Hub struct {
@@ -112,12 +116,13 @@ func (h *Hub) Run() {
 	}
 }
 
-func (h *Hub) RegisterClient(conn *websocket.Conn, matchID uuid.UUID) *Client {
+func (h *Hub) RegisterClient(conn *websocket.Conn, matchID uuid.UUID, handler func(*Client, []byte)) *Client {
 	client := &Client{
 		hub:     h,
 		conn:    conn,
 		Send:    make(chan []byte, 256),
 		matchID: matchID,
+		handler: handler,
 	}
 	h.register <- client
 	return client
@@ -172,7 +177,7 @@ func (c *Client) ReadPump() {
 	}()
 
 	for {
-		_, _, err := c.conn.ReadMessage()
+		_, message, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("[Hub] WebSocket error: %v", err)
@@ -180,6 +185,9 @@ func (c *Client) ReadPump() {
 			break
 		}
 
+		if c.handler != nil {
+			c.handler(c, message)
+		}
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"time"
 
 	"gameheros/internal/models"
 	"gameheros/internal/rules"
@@ -68,7 +69,9 @@ func (h *Handler) handleError(c *gin.Context, err error) {
 		errors.Is(err, rules.ErrDuplicateTeam),
 		errors.Is(err, rules.ErrDuplicatePlayer),
 		errors.Is(err, rules.ErrDuplicateMatchSameDay),
-		errors.Is(err, rules.ErrTeamAlreadyInTournament):
+		errors.Is(err, rules.ErrTeamAlreadyInTournament),
+		errors.Is(err, rules.ErrPlayerAlreadyInTeam),
+		errors.Is(err, rules.ErrPlayerInDifferentTeam):
 		c.JSON(http.StatusConflict, models.ErrorResponse{Error: err.Error()})
 
 	default:
@@ -113,6 +116,32 @@ func (h *Handler) GetTournament(c *gin.Context) {
 	c.JSON(http.StatusOK, tournament)
 }
 
+func (h *Handler) UpdateTournamentConfig(c *gin.Context) {
+	var req models.UpdateTournamentConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid request: " + err.Error()})
+		return
+	}
+
+	tournament, err := h.tournamentSvc.UpdateConfig(c.Param("id"), req)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, tournament)
+}
+
+func (h *Handler) IsTournamentLocked(c *gin.Context) {
+	isLocked, err := h.tournamentSvc.IsLocked(c.Param("id"))
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"is_locked": isLocked})
+}
+
 func (h *Handler) GetLeaderboard(c *gin.Context) {
 	leaderboard, err := h.tournamentSvc.GetLeaderboard(c.Param("id"))
 	if err != nil {
@@ -121,6 +150,18 @@ func (h *Handler) GetLeaderboard(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, leaderboard)
+}
+
+func (h *Handler) RecalculateLeaderboard(c *gin.Context) {
+	err := h.tournamentSvc.RecalculateLeaderboard(c.Param("id"))
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Leaderboard recalculated successfully",
+	})
 }
 
 func (h *Handler) AddTeamToTournament(c *gin.Context) {
@@ -155,6 +196,19 @@ func (h *Handler) GetTournamentTeams(c *gin.Context) {
 	c.JSON(http.StatusOK, teams)
 }
 
+func (h *Handler) GetTeamPlayersInTournament(c *gin.Context) {
+	players, err := h.playerSvc.GetTeamPlayersInTournament(
+		c.Param("id"),
+		c.Param("teamId"),
+	)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, players)
+}
+
 func (h *Handler) CreateTeam(c *gin.Context) {
 	var req models.CreateTeamRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -181,30 +235,88 @@ func (h *Handler) ListTeams(c *gin.Context) {
 	c.JSON(http.StatusOK, teams)
 }
 
-func (h *Handler) GetTeam(c *gin.Context) {
-	team, err := h.teamSvc.GetByID(c.Param("id"))
-	if err != nil {
-		h.handleError(c, err)
-		return
-	}
-
-	c.JSON(http.StatusOK, team)
-}
-
-func (h *Handler) AddPlayer(c *gin.Context) {
-	var req models.AddPlayerRequest
+func (h *Handler) CreatePlayer(c *gin.Context) {
+	var req models.CreatePlayerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid request: " + err.Error()})
 		return
 	}
 
-	player, err := h.playerSvc.AddToTeam(c.Param("id"), req)
+	player, err := h.playerSvc.Create(req)
 	if err != nil {
 		h.handleError(c, err)
 		return
 	}
 
 	c.JSON(http.StatusCreated, player)
+}
+
+func (h *Handler) ListPlayers(c *gin.Context) {
+	sportType := c.Query("sport_type")
+
+	var players []models.Player
+	var err error
+
+	if sportType != "" {
+		players, err = h.playerSvc.GetBySportType(sportType)
+	} else {
+		players, err = h.playerSvc.GetAll()
+	}
+
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, players)
+}
+
+func (h *Handler) GetPlayer(c *gin.Context) {
+	player, err := h.playerSvc.GetProfile(c.Param("id"))
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, player)
+}
+
+func (h *Handler) AddPlayerToTeamInTournament(c *gin.Context) {
+	var req models.AddPlayerToTeamRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid request: " + err.Error()})
+		return
+	}
+
+	err := h.playerSvc.AddToTeamInTournament(
+		c.Param("id"),
+		c.Param("teamId"),
+		req.PlayerID,
+	)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Player added to team successfully",
+	})
+}
+
+func (h *Handler) RemovePlayerFromTeamInTournament(c *gin.Context) {
+	err := h.playerSvc.RemoveFromTeamInTournament(
+		c.Param("id"),
+		c.Param("teamId"),
+		c.Param("playerId"),
+	)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Player removed from team successfully",
+	})
 }
 
 func (h *Handler) CreateMatch(c *gin.Context) {
@@ -241,6 +353,32 @@ func (h *Handler) GetMatch(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, match)
+}
+
+func (h *Handler) UpdateMatch(c *gin.Context) {
+	var req models.UpdateMatchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid request: " + err.Error()})
+		return
+	}
+
+	match, err := h.matchSvc.Update(c.Param("id"), req)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, match)
+}
+
+func (h *Handler) DeleteMatch(c *gin.Context) {
+	err := h.matchSvc.Delete(c.Param("id"))
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Match deleted successfully"})
 }
 
 func (h *Handler) GetMatchEvents(c *gin.Context) {
@@ -345,15 +483,14 @@ func (h *Handler) RecordEvent(c *gin.Context) {
 	})
 }
 
-
 var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+
+		return true
+	},
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true 
-	},
 }
-
 
 func (h *Handler) HandleWebSocket(c *gin.Context) {
 	matchIDStr := c.Param("id")
@@ -363,18 +500,72 @@ func (h *Handler) HandleWebSocket(c *gin.Context) {
 		return
 	}
 
-	
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("[WebSocket] Upgrade error: %v", err)
 		return
 	}
 
-	
 	hub := scoring.GetHub()
-	client := hub.RegisterClient(conn, matchID)
 
-	
+	messageHandler := func(client *scoring.Client, message []byte) {
+		var msg map[string]interface{}
+		if err := json.Unmarshal(message, &msg); err != nil {
+			log.Printf("[WebSocket] Error parsing message: %v", err)
+			return
+		}
+
+		msgType, ok := msg["type"].(string)
+		if !ok {
+			log.Printf("[WebSocket] Invalid message type")
+			return
+		}
+
+		switch msgType {
+		case "RECORD_EVENT":
+
+			eventType, _ := msg["event_type"].(string)
+			eventData, _ := msg["event_data"].(map[string]interface{})
+
+			if eventType == "" {
+				log.Printf("[WebSocket] Missing event_type in RECORD_EVENT message")
+				return
+			}
+
+			_, _, err := h.matchSvc.RecordEvent(matchIDStr, eventType, eventData)
+			if err != nil {
+
+				errorMsg := scoring.WSMessage{
+					Type:      scoring.MsgTypeError,
+					MatchID:   matchID.String(),
+					Payload:   map[string]interface{}{"message": err.Error()},
+					Timestamp: time.Now().UnixMilli(),
+				}
+				if data, err := json.Marshal(errorMsg); err == nil {
+					client.Send <- data
+				}
+				return
+			}
+
+		case "GET_EVENTS":
+
+			events, err := h.matchSvc.GetEvents(matchIDStr)
+			if err == nil {
+				eventsMsg := scoring.WSMessage{
+					Type:      scoring.MsgTypeEventsList,
+					MatchID:   matchID.String(),
+					Payload:   events,
+					Timestamp: time.Now().UnixMilli(),
+				}
+				if data, err := json.Marshal(eventsMsg); err == nil {
+					client.Send <- data
+				}
+			}
+		}
+	}
+
+	client := hub.RegisterClient(conn, matchID, messageHandler)
+
 	manager := scoring.GetMatchManager()
 	if state, err := manager.GetLiveState(matchID); err == nil {
 		initialMsg := map[string]interface{}{
@@ -388,7 +579,19 @@ func (h *Handler) HandleWebSocket(c *gin.Context) {
 		}
 	}
 
-	
+	events, err := h.matchSvc.GetEvents(matchIDStr)
+	if err == nil {
+		eventsMsg := scoring.WSMessage{
+			Type:      scoring.MsgTypeEventsList,
+			MatchID:   matchID.String(),
+			Payload:   events,
+			Timestamp: time.Now().UnixMilli(),
+		}
+		if data, err := json.Marshal(eventsMsg); err == nil {
+			client.Send <- data
+		}
+	}
+
 	go client.WritePump()
 	go client.ReadPump()
 }
@@ -401,4 +604,70 @@ func (h *Handler) GetPlayerProfile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, profile)
+}
+
+func (h *Handler) GetAvailablePlayersForTournament(c *gin.Context) {
+	players, err := h.playerSvc.GetAvailablePlayersForTournament(c.Param("id"))
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, players)
+}
+
+func (h *Handler) GetMatchStats(c *gin.Context) {
+	stats, err := h.matchSvc.GetMatchStats(c.Param("id"))
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, stats)
+}
+
+func (h *Handler) UpdatePlayer(c *gin.Context) {
+	var req models.UpdatePlayerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid request: " + err.Error()})
+		return
+	}
+
+	playerID := c.Param("id")
+	var player *models.Player
+	var err error
+
+	if req.Name != "" {
+		player, err = h.playerSvc.UpdateName(playerID, req.Name)
+		if err != nil {
+			h.handleError(c, err)
+			return
+		}
+	}
+
+	if req.Role != "" || (req.Role == "" && req.Name == "") {
+
+		if player == nil {
+			player, err = h.playerSvc.GetByID(playerID)
+			if err != nil {
+				h.handleError(c, err)
+				return
+			}
+		}
+		player, err = h.playerSvc.UpdateRole(playerID, req.Role)
+		if err != nil {
+			h.handleError(c, err)
+			return
+		}
+	}
+
+	if player == nil {
+		player, err = h.playerSvc.GetByID(playerID)
+		if err != nil {
+			h.handleError(c, err)
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, player)
 }
